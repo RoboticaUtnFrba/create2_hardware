@@ -1,13 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>create2_hardware</name>
+  <name>create2_bringup</name>
   <version>1.0.0</version>
-  <description>Hardware package for the iRobot Create 2</description>
+  <description>Package with utilities to setup and bringup the iRobot Create 2</description>
   <maintainer email="eborghiorue@frba.utn.edu.ar">Emiliano J. Borghi Orue</maintainer>
   <license>Apache License 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>create2_driver</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
