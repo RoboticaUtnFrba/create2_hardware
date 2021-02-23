@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(create2_hardware)
+project(create2_bringup)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -25,6 +25,9 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
+install(
+  DIRECTORY config launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()
