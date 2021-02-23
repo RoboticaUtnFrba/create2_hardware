@@ -10,12 +10,18 @@ jobs:
   # Note that we pass each job a different name to distinguish each linter job
   
   ament_lint:
-    name: ament_${{ matrix.linter }}
+    name: ament-${{ matrix.linter }}
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
-        linter: [copyright, flake8, pep257, xmllint]
+        linter:
+          - clang-format
+          - cppcheck
+          - flake8
+          - lint-cmake
+          - pep257
+          - xmllint
     steps:
       - uses: actions/checkout@main
       - uses: ros-tooling/setup-ros@0.1.2
@@ -26,7 +32,8 @@ jobs:
           distribution: foxy
           linter: ${{ matrix.linter }}
           package-name: |
-            create2_hardware
+            create2_bringup
+            create2_driver
   
   # TODO: Disabled because of an error:
   # 

@@ -1,46 +1,45 @@
 /**
-Software License Agreement (BSD)
-\file      create_driver.cpp
-\authors   Jacob Perron <jacobmperron@gmail.com>
-\copyright Copyright (c) 2015, Autonomy Lab (Simon Fraser University), All rights reserved.
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
- * Redistributions of source code must retain the above copyright notice,
-   this list of conditions and the following disclaimer.
- * Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the
-   documentation and/or other materials provided with the distribution.
- * Neither the name of Autonomy Lab nor the names of its contributors may
-   be used to endorse or promote products derived from this software without
-   specific prior written permission.
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
-*/
-
-#include <create2_driver/create_driver.h>
+ * Software License Agreement (BSD)
+ * \file      create_driver.cpp
+ * \authors   Jacob Perron <jacobmperron@gmail.com>
+ * \copyright Copyright (c) 2015, Autonomy Lab (Simon Fraser University), All rights reserved.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *  * Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  * Neither the name of Autonomy Lab nor the names of its contributors may
+ *    be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <chrono>
+#include <create2_driver/create_driver.hpp>
+#include <memory>
 #include <string>
 
-
 CreateDriver::CreateDriver()
-  : Node("create_driver"),
-    model_(create::RobotModel::CREATE_2),
-    tf_broadcaster_(this),
-    diagnostics_(this),
-    last_cmd_vel_time_(0),
-    is_running_slowly_(false)
+: Node("create_driver"),
+  model_(create::RobotModel::CREATE_2),
+  tf_broadcaster_(this),
+  diagnostics_(this),
+  last_cmd_vel_time_(0),
+  is_running_slowly_(false)
 {
   dev_ = declare_parameter<std::string>("dev", "/dev/ttyUSB0");
   base_frame_ = declare_parameter<std::string>("base_frame", "base_footprint");
@@ -55,8 +54,7 @@ CreateDriver::CreateDriver()
 
   robot_ = new create::Create(model_);
 
-  if (!robot_->connect(dev_, baud_))
-  {
+  if (!robot_->connect(dev_, baud_)) {
     RCLCPP_FATAL(get_logger(), "[CREATE] Failed to establish serial connection with Create.");
     rclcpp::shutdown();
   }
@@ -67,7 +65,9 @@ CreateDriver::CreateDriver()
   robot_->setMode(create::MODE_FULL);
 
   // Show robot's battery level
-  RCLCPP_INFO(get_logger(), "[CREATE] Battery level %.2f %%", (robot_->getBatteryCharge() / robot_->getBatteryCapacity()) * 100.0);
+  RCLCPP_INFO(
+    get_logger(), "[CREATE] Battery level %.2f %%",
+    (robot_->getBatteryCharge() / robot_->getBatteryCapacity()) * 100.0);
 
   // Set frame_id's
   tf_odom_.header.frame_id = odom_frame_;
@@ -82,15 +82,15 @@ CreateDriver::CreateDriver()
   joint_state_msg_.name[1] = "right_wheel_joint";
 
   // Populate intial covariances
-  for (int i = 0; i < 36; i++)
-  {
+  for (int i = 0; i < 36; i++) {
     odom_msg_.pose.covariance[i] = COVARIANCE[i];
     odom_msg_.twist.covariance[i] = COVARIANCE[i];
   }
 
   // Setup subscribers
-  cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>("cmd_vel", 1, std::bind(&CreateDriver::cmdVelCallback, this, std::placeholders::_1));
-  
+  cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+    "cmd_vel", 1, std::bind(&CreateDriver::cmdVelCallback, this, std::placeholders::_1));
+
   // Setup publishers
   odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odom", 1);
   wheel_joint_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_states", 1);
@@ -105,7 +105,8 @@ CreateDriver::CreateDriver()
   diagnostics_.setHardwareID("iRobot Create 2");
 
   // Setup update loop
-  const auto loop_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / loop_hz_));
+  const auto loop_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::duration<double>(1.0 / loop_hz_));
   loop_timer_ = create_wall_timer(loop_period, std::bind(&CreateDriver::spinOnce, this));
 
   RCLCPP_INFO(get_logger(), "[CREATE] Ready.");
@@ -130,35 +131,30 @@ bool CreateDriver::update()
   publishJointState();
 
   // If last velocity command was sent longer than latch duration, stop robot
-  if (last_cmd_vel_time_.nanoseconds() == 0 || now() - last_cmd_vel_time_ >= rclcpp::Duration::from_seconds(latch_duration_))
-  {
+  if (
+    last_cmd_vel_time_.nanoseconds() == 0 ||
+    now() - last_cmd_vel_time_ >= rclcpp::Duration::from_seconds(latch_duration_)) {
     robot_->drive(0, 0);
   }
 
   return true;
 }
 
-void CreateDriver::updateBatteryDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& stat)
+void CreateDriver::updateBatteryDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & stat)
 {
   const float charge = robot_->getBatteryCharge();
   const float capacity = robot_->getBatteryCapacity();
   const create::ChargingState charging_state = robot_->getChargingState();
   const float charge_ratio = charge / capacity;
 
-  if (charging_state == create::CHARGE_FAULT)
-  {
+  if (charging_state == create::CHARGE_FAULT) {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Charging fault reported by base");
-  }
-  else if (charge_ratio == 0)
-  {
+  } else if (charge_ratio == 0) {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Battery reports no charge");
-  }
-  else if (charge_ratio < 0.1)
-  {
-    stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Battery reports less than 10% charge");
-  }
-  else
-  {
+  } else if (charge_ratio < 0.1) {
+    stat.summary(
+      diagnostic_msgs::msg::DiagnosticStatus::WARN, "Battery reports less than 10% charge");
+  } else {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Battery is OK");
   }
 
@@ -168,8 +164,7 @@ void CreateDriver::updateBatteryDiagnostics(diagnostic_updater::DiagnosticStatus
   stat.add("Current (A)", robot_->getCurrent());
   stat.add("Voltage (V)", robot_->getVoltage());
 
-  switch (charging_state)
-  {
+  switch (charging_state) {
     case create::CHARGE_NONE:
       stat.add("Charging state", "Not charging");
       break;
@@ -191,20 +186,15 @@ void CreateDriver::updateBatteryDiagnostics(diagnostic_updater::DiagnosticStatus
   }
 }
 
-void CreateDriver::updateSafetyDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& stat)
+void CreateDriver::updateSafetyDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & stat)
 {
   const bool is_wheeldrop = robot_->isWheeldrop();
   const bool is_cliff = robot_->isCliff();
-  if (is_wheeldrop)
-  {
+  if (is_wheeldrop) {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Wheeldrop detected");
-  }
-  else if (is_cliff)
-  {
+  } else if (is_cliff) {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Cliff detected");
-  }
-  else
-  {
+  } else {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "No safety issues detected");
   }
 
@@ -212,23 +202,20 @@ void CreateDriver::updateSafetyDiagnostics(diagnostic_updater::DiagnosticStatusW
   stat.add("Cliff", is_cliff);
 }
 
-void CreateDriver::updateSerialDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& stat)
+void CreateDriver::updateSerialDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & stat)
 {
   const bool is_connected = robot_->connected();
   const uint64_t corrupt_packets = robot_->getNumCorruptPackets();
   const uint64_t total_packets = robot_->getTotalPackets();
 
-  if (!is_connected)
-  {
+  if (!is_connected) {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Serial port to base not open");
-  }
-  else if (corrupt_packets)
-  {
-    stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN,
-                 "Corrupt packets detected. If the number of corrupt packets is increasing, data may be unreliable");
-  }
-  else
-  {
+  } else if (corrupt_packets) {
+    stat.summary(
+      diagnostic_msgs::msg::DiagnosticStatus::WARN,
+      "Corrupt packets detected. If the number of corrupt packets is increasing, data may be "
+      "unreliable");
+  } else {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Serial connection is good");
   }
 
@@ -236,11 +223,10 @@ void CreateDriver::updateSerialDiagnostics(diagnostic_updater::DiagnosticStatusW
   stat.add("Total packets", total_packets);
 }
 
-void CreateDriver::updateModeDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& stat)
+void CreateDriver::updateModeDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & stat)
 {
   const create::CreateMode mode = robot_->getMode();
-  switch (mode)
-  {
+  switch (mode) {
     case create::MODE_UNAVAILABLE:
       stat.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Unknown mode of operation");
       break;
@@ -259,14 +245,11 @@ void CreateDriver::updateModeDiagnostics(diagnostic_updater::DiagnosticStatusWra
   }
 }
 
-void CreateDriver::updateDriverDiagnostics(diagnostic_updater::DiagnosticStatusWrapper& stat)
+void CreateDriver::updateDriverDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & stat)
 {
-  if (is_running_slowly_)
-  {
+  if (is_running_slowly_) {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "Internal loop running slowly");
-  }
-  else
-  {
+  } else {
     stat.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "Maintaining loop frequency");
   }
 }
@@ -310,8 +293,7 @@ void CreateDriver::publishOdom()
   odom_msg_.twist.covariance[31] = vel.covariance[7];
   odom_msg_.twist.covariance[35] = vel.covariance[8];
 
-  if (publish_tf_)
-  {
+  if (publish_tf_) {
     tf_odom_.header.stamp = now();
     tf_odom_.transform.translation.x = pose.x;
     tf_odom_.transform.translation.y = pose.y;
@@ -348,23 +330,19 @@ void CreateDriver::spinOnce()
   const double target_period = 1. / loop_hz_;
   is_running_slowly_ = elapsed.seconds() > target_period;
 
-  if (is_running_slowly_)
-  {
+  if (is_running_slowly_) {
     RCLCPP_WARN(get_logger(), "[CREATE] Loop running slowly.");
   }
 }
 
-int main(int argc, char** argv)
+int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   auto create_driver = std::make_shared<CreateDriver>();
 
-  try
-  {
+  try {
     rclcpp::spin(create_driver);
-  }
-  catch (std::runtime_error& ex)
-  {
+  } catch (std::runtime_error & ex) {
     RCLCPP_FATAL_STREAM(create_driver->get_logger(), "[CREATE] Runtime error: " << ex.what());
     return 1;
   }

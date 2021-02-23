@@ -62,7 +62,7 @@ endif()
 # Install
 
 install(
-  DIRECTORY include 
+  DIRECTORY include
   DESTINATION include
 )
 
